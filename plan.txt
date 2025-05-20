@@ -1,0 +1,1 @@
+<p>user controlled things:</p><p><br></p><p>friction</p><p>number of objects </p><p>type of objects</p><p>object attributes</p><p>placing of objects</p><p>acceleration?</p><p>elasticity of walls</p><p>gravity y/n and how much</p><p>launch angle(s) (in deg?)</p><p><br></p>
