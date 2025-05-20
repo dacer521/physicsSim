@@ -5,7 +5,9 @@
 #include <math.h>
 
 #include "Square.h"
+#include "Circle.h"
 
+using namespace std;
 
 void handleMovement(const SDL_KeyboardEvent &keyEvent, float &x, float &y);
 
@@ -43,6 +45,10 @@ int main(int argc, char* argv[]) {
 
     Square player(100.0f, 100.0f, 50.0f, 50.0f, -2.0f, -1.5f, 1.0f); // x, y, w, h, vx, vy, mass
 
+    Square player3(500.0f, 300.0f, 50.0f, 50.0f, -2.0f, -1.5f, 1.0f); // x, y, w, h, vx, vy, mass
+
+    Circle player2(200.0f, 300.0f, 40.0f, 0.0f, 0.0f, 1.0f); //x y radius vx vy mass
+
     bool running = true;
     float delta_time;
     int FPS = 60;
@@ -58,6 +64,9 @@ int main(int argc, char* argv[]) {
         }
         
 
+
+    
+
     int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
 
     // Only delay if we are too fast to update this frame
@@ -68,6 +77,9 @@ int main(int argc, char* argv[]) {
     delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
 
     last_frame_time = SDL_GetTicks();
+
+    
+
     // Update position
     player.update(1.0f); // deltaTime = 1 for now
 
@@ -92,6 +104,7 @@ int main(int argc, char* argv[]) {
     
     player.update(1.0f); // assuming deltaTime = 1 for simplicity
 
+
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
@@ -99,7 +112,7 @@ int main(int argc, char* argv[]) {
     SDL_FRect rect = player.toFRect(); 
     SDL_RenderFillRect(renderer, &rect);
     
-    
+    player2.draw_circle(renderer, player2.x, player2.y, player2.r, {0, 255, 0, 255});
 
     SDL_RenderPresent(renderer);
     SDL_Delay(16); // ~60 FPS
