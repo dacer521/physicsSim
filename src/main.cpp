@@ -3,10 +3,13 @@
 #include <SDL_keyboard.h>
 #include <iostream>
 #include <math.h>
+#include <vector>
 
+#include "Shape.h"
 #include "Square.h"
 #include "Circle.h"
 #include "Triangle.h"
+
 
 using namespace std;
 
@@ -127,5 +130,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-
-
+void renderRect(SDL_Renderer* renderer, SDL_FRect rect) {
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+    SDL_RenderFillRect(renderer, &rect);
+}

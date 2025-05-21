@@ -2,7 +2,7 @@
 #include <algorithm>
 
 Triangle::Triangle(Vec2 v1, Vec2 v2, Vec2 v3, float m, float vx, float vy, SDL_Color c)
-    : vx(0), vy(0), mass(m), color(c) // v1 {x, y} v2 v3 mass vx vy mass color
+    : vx(vx), vy(vy), mass(m), color(c)
 {
     vertices[0] = v1;
     vertices[1] = v2;
@@ -24,7 +24,7 @@ void Triangle::update(float deltaTime) {
 void Triangle::drawTriangle(SDL_Renderer* renderer) const {
     auto edgeFunction = [](const Vec2& a, const Vec2& b, const Vec2& c) {
         return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
-    }; 
+    };
 
     float minX = std::min({ vertices[0].x, vertices[1].x, vertices[2].x });
     float maxX = std::max({ vertices[0].x, vertices[1].x, vertices[2].x });
@@ -45,4 +45,8 @@ void Triangle::drawTriangle(SDL_Renderer* renderer) const {
             }
         }
     }
+}
+
+void Triangle::draw(SDL_Renderer* renderer) const {
+    drawTriangle(renderer);
 }

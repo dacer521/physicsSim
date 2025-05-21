@@ -18,3 +18,9 @@ void Square::applyForce(float fx, float fy) {
 SDL_FRect Square::toFRect() const {
     return SDL_FRect{ x, y, width, height };
 }
+
+void Square::draw(SDL_Renderer* renderer) const {
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_FRect rect = toFRect();
+    SDL_RenderFillRect(renderer, &rect);
+}
