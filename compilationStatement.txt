@@ -1,4 +1,1 @@
-g++ -std=c++17 -Iinclude -F./lib -framework SDL3 \
-    -Wl,-rpath,@loader_path/lib \
-    src/main.cpp src/square.cpp src/movement.cpp src/circle.cpp \
-    -o physicsSim
+g++ -std=c++17 -Iinclude -F./lib -framework SDL3 -Wl,-rpath,@loader_path/lib src/main.cpp src/square.cpp src/movement.cpp src/circle.cpp src/triangle.cpp -o physicsSim

@@ -6,6 +6,7 @@
 
 #include "Square.h"
 #include "Circle.h"
+#include "Triangle.h"
 
 using namespace std;
 
@@ -45,9 +46,9 @@ int main(int argc, char* argv[]) {
 
     Square player(100.0f, 100.0f, 50.0f, 50.0f, -2.0f, -1.5f, 1.0f); // x, y, w, h, vx, vy, mass
 
-    Square player3(500.0f, 300.0f, 50.0f, 50.0f, -2.0f, -1.5f, 1.0f); // x, y, w, h, vx, vy, mass
-
     Circle player2(200.0f, 300.0f, 40.0f, 0.0f, 0.0f, 1.0f); //x y radius vx vy mass
+
+    Triangle player3({350.0f, 0.0f}, {300.0f, 30.0f}, {400.0f, 60.0f}, 1.0f, 0.0f, 0.0f, {0, 255, 0, 255}); // v1 {x, y} v2 v3 mass vx vy mass color
 
     bool running = true;
     float delta_time;
@@ -112,6 +113,8 @@ int main(int argc, char* argv[]) {
     SDL_FRect rect = player.toFRect(); 
     SDL_RenderFillRect(renderer, &rect);
     
+    player3.drawTriangle(renderer);
+
     player2.draw_circle(renderer, player2.x, player2.y, player2.r, {0, 255, 0, 255});
 
     SDL_RenderPresent(renderer);
