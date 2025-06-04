@@ -4,133 +4,98 @@
 #include <iostream>
 #include <math.h>
 #include <vector>
+#include <memory>
 
 #include "Shape.h"
 #include "Square.h"
 #include "Circle.h"
 #include "Triangle.h"
 
-
 using namespace std;
-
-void handleMovement(const SDL_KeyboardEvent &keyEvent, float &x, float &y);
 
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
-        std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
+        cerr << "SDL_Init Error: " << SDL_GetError() << endl;
         return 1;
     }
 
-    
+    int width = 640;
+    int height = 480;
 
-    int height = 640;
-    int width = 480;
-
-    SDL_Window* window = SDL_CreateWindow("Physics Sim", height, width, 0);
+    SDL_Window* window = SDL_CreateWindow("Physics Sim", width, height, 0);
     if (!window) {
-        std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
+        cerr << "SDL_CreateWindow Error: " << SDL_GetError() << endl;
         SDL_Quit();
         return 1;
-    }
-
-    else {
-        
-        SDL_GetWindowSizeInPixels(window, &width, &height);
     }
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) {
-        std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+        cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << endl;
         SDL_DestroyWindow(window);
         SDL_Quit();
         return 1;
     }
-    
 
-    Square player(100.0f, 100.0f, 50.0f, 50.0f, -2.0f, -1.5f, 1.0f); // x, y, w, h, vx, vy, mass
-
-    Circle player2(200.0f, 300.0f, 40.0f, 0.0f, 0.0f, 1.0f); //x y radius vx vy mass
-
-    Triangle player3({350.0f, 0.0f}, {300.0f, 30.0f}, {400.0f, 60.0f}, 1.0f, 0.0f, 0.0f, {0, 255, 0, 255}); // v1 {x, y} v2 v3 mass vx vy mass color
+    vector<shared_ptr<Shape>> shapeList = {
+        make_shared<Square>(270.0f, 100.0f, 50.0f, 50.0f, 0.0f, -1.5f, 1.0f),
+        make_shared<Square>(320.0f, 114.0f, 50.0f, 50.0f, -5.0f, -1.5f, 1.0f),
+        make_shared<Triangle>(Vec2{300.0f, 300.0f}, Vec2{340.0f, 300.0f}, Vec2{320.0f, 260.0f}, 1.2f, 0.0f, -1.0f, SDL_Color{255, 255, 255, 255})
+    };
 
     bool running = true;
-    float delta_time;
     int FPS = 60;
-    float FRAME_TARGET_TIME = (1000 / FPS);
+    float FRAME_TARGET_TIME = 1000.0f / FPS;
     float last_frame_time = 0;
-    
-    SDL_Event event;
+
     while (running) {
+        float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
+        last_frame_time = SDL_GetTicks();
+
+        SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT) {
                 running = false;
             }
         }
-        
 
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
 
-    
+        // Update all shapes and check bounds
+        for (auto& shape : shapeList) {
+            shape->update(delta_time);
+            shape->setVy(shape->getVy() + 1.0f);
+            shape->checkCollision(width, height);
+        }
 
-    int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
+        // Determine collision status for each shape
+        vector<bool> isColliding(shapeList.size(), false);
+        for (size_t i = 0; i < shapeList.size(); ++i) {
+            for (size_t j = 0; j < shapeList.size(); ++j) {
+                if (i != j && shapeList[i]->collideShape(*shapeList[j])) {
+                    isColliding[i] = true;
+                    isColliding[j] = true;
+                }
+            }
+        }
 
-    // Only delay if we are too fast to update this frame
-    if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME) {
-        SDL_Delay(time_to_wait);
+        // Draw all shapes based on collision status
+        for (size_t i = 0; i < shapeList.size(); ++i) {
+            SDL_Color color = isColliding[i] ? SDL_Color{255, 255, 255, 255} : SDL_Color{255, 0, 0, 255};
+            shapeList[i]->draw(renderer, color);
+        }
+
+        SDL_RenderPresent(renderer);
+
+        float frame_time = SDL_GetTicks() - last_frame_time;
+        if (frame_time < FRAME_TARGET_TIME) {
+            SDL_Delay(FRAME_TARGET_TIME - frame_time);
+        }
     }
-    // Get a delta time factor converted to seconds to be used to update my objects
-    delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
-
-    last_frame_time = SDL_GetTicks();
-
-    
-
-    // Update position
-    player.update(1.0f); // deltaTime = 1 for now
-
-    player.vy++;
-    
-    // Bounce logic
-    if (player.y <= 0 && player.vy < 1) {
-        player.vy *= -1;
-    }
-
-    if (player.y + player.height >= height && player.vy > 1) {
-        player.vy *= -1;
-    }
-
-    if (player.x <= 0 && player.vx < 1) {
-        player.vx *= -1;
-    }
-
-    if (player.x + player.width >= width && player.vx > 1) {
-        player.vx *= -1;
-    }
-    
-    player.update(1.0f); // assuming deltaTime = 1 for simplicity
-
-
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
-
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_FRect rect = player.toFRect(); 
-    SDL_RenderFillRect(renderer, &rect);
-    
-    player3.drawTriangle(renderer);
-
-    player2.draw_circle(renderer, player2.x, player2.y, player2.r, {0, 255, 0, 255});
-
-    SDL_RenderPresent(renderer);
-    SDL_Delay(16); // ~60 FPS
-}
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
-}
-
-void renderRect(SDL_Renderer* renderer, SDL_FRect rect) {
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_RenderFillRect(renderer, &rect);
 }

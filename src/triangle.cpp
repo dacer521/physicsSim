@@ -1,5 +1,10 @@
 #include "Triangle.h"
+#include "Square.h"
+
 #include <algorithm>
+#include <array>
+#include <vector>
+#include <iostream>
 
 Triangle::Triangle(Vec2 v1, Vec2 v2, Vec2 v3, float m, float vx, float vy, SDL_Color c)
     : vx(vx), vy(vy), mass(m), color(c)
@@ -21,7 +26,7 @@ void Triangle::update(float deltaTime) {
     }
 }
 
-void Triangle::drawTriangle(SDL_Renderer* renderer) const {
+void Triangle::drawTriangle(SDL_Renderer* renderer, SDL_Color color) const {
     auto edgeFunction = [](const Vec2& a, const Vec2& b, const Vec2& c) {
         return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
     };
@@ -47,6 +52,229 @@ void Triangle::drawTriangle(SDL_Renderer* renderer) const {
     }
 }
 
-void Triangle::draw(SDL_Renderer* renderer) const {
-    drawTriangle(renderer);
+void Triangle::draw(SDL_Renderer* renderer, SDL_Color color) {
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    drawTriangle(renderer, color);
+}
+
+void Triangle::checkCollision(int screenWidth, int screenHeight) {
+    float minX = std::min({vertices[0].x, vertices[1].x, vertices[2].x});
+    float maxX = std::max({vertices[0].x, vertices[1].x, vertices[2].x});
+    float minY = std::min({vertices[0].y, vertices[1].y, vertices[2].y});
+    float maxY = std::max({vertices[0].y, vertices[1].y, vertices[2].y});
+
+    if (maxY >= screenHeight) {
+        float offset = screenHeight - maxY;
+        for (auto& v : vertices) v.y += offset;
+        vy = -abs(vy);
+    }
+
+    if (minY <= 0) {
+        float offset = -minY;
+        for (auto& v : vertices) v.y += offset;
+        vy = abs(vy);
+    }
+
+    if (maxX >= screenWidth) {
+        float offset = screenWidth - maxX;
+        for (auto& v : vertices) v.x += offset;
+        vx = -abs(vx);
+    }
+
+    if (minX <= 0) {
+        float offset = -minX;
+        for (auto& v : vertices) v.x += offset;
+        vx = abs(vx);
+    }
+}
+
+float Triangle::getVy() const {
+    return vy;
+}
+
+void Triangle::setVy(float v) {
+    vy = v; 
+}
+
+float Triangle::getVx() const { 
+    return vx; 
+}
+
+void Triangle::setVx(float v) { 
+    vx = v; 
+}
+
+float Triangle::getX() const {
+    return getV1().x;
+}
+
+float Triangle::getY() const {
+    return getV1().y;
+}
+
+Vec2 Triangle::getV1() const {
+    return vertices[0];
+}
+
+Vec2 Triangle::getV2() const {
+    return vertices[1];
+}
+
+Vec2 Triangle::getV3() const {
+    return vertices[2];
+}
+
+
+std::vector<Vec2> Triangle::getVertices() const {
+    std::vector<Vec2> triangleVerts;
+    triangleVerts.push_back(vertices[0]);
+    triangleVerts.push_back(vertices[1]);
+    triangleVerts.push_back(vertices[2]);
+    return triangleVerts;
+}
+
+
+float Triangle::getWidth() const { 
+    float minX = std::min({ vertices[0].x, vertices[1].x, vertices[2].x });
+    float maxX = std::max({ vertices[0].x, vertices[1].x, vertices[2].x });
+    return maxX - minX;
+}
+
+float Triangle::getHeight() const { 
+    float minY = std::min({ vertices[0].y, vertices[1].y, vertices[2].y });
+    float maxY = std::max({ vertices[0].y, vertices[1].y, vertices[2].y });
+    return maxY - minY;
+}
+
+bool Triangle::collideShape(Shape &shape) {
+    std::vector<Vec2> axes;
+    std::vector<Vec2> triangleVerts = this->getVertices();
+    if (Square* s = dynamic_cast<Square*>(&shape)) {
+        
+
+        std::vector<Vec2> squareVerts = s->getVertices();
+        
+
+        // Triangle edge normals
+        for (int i = 0; i < triangleVerts.size(); i++) {
+            Vec2 edge = {
+                triangleVerts[(i + 1) % 3].x - triangleVerts[i].x,
+                triangleVerts[(i + 1) % 3].y - triangleVerts[i].y
+            };
+            Vec2 normal = {-edge.y, edge.x};
+            float length = std::sqrt(normal.x * normal.x + normal.y * normal.y);
+            Vec2 normalized = {normal.x / length, normal.y / length};
+            axes.push_back(normalized);
+        }
+
+        // Square edge normals
+        for (int i = 0; i < squareVerts.size(); i++) {
+            Vec2 edge = {
+                squareVerts[(i + 1) % 4].x - squareVerts[i].x,
+                squareVerts[(i + 1) % 4].y - squareVerts[i].y
+            };
+            Vec2 normal = {-edge.y, edge.x};
+            float length = std::sqrt(normal.x * normal.x + normal.y * normal.y);
+            Vec2 normalized = {normal.x / length, normal.y / length};
+            axes.push_back(normalized);
+        }
+
+        // SAT axis testing
+        for (Vec2 axis : axes) {
+            float triMin = std::numeric_limits<float>::infinity();
+            float triMax = -std::numeric_limits<float>::infinity();
+            float sqMin = std::numeric_limits<float>::infinity();
+            float sqMax = -std::numeric_limits<float>::infinity();
+
+            for (Vec2 vertex : triangleVerts) {
+                float projection = dot(vertex, axis);
+                triMin = std::min(triMin, projection);
+                triMax = std::max(triMax, projection);
+            }
+
+            for (Vec2 vertex : squareVerts) {
+                float projection = dot(vertex, axis);
+                sqMin = std::min(sqMin, projection);
+                sqMax = std::max(sqMax, projection);
+            }
+
+            if (triMax < sqMin || sqMax < triMin) {
+                return false; // Separating axis found
+            }
+        }
+
+        return true; // No separating axis → collision
+    }
+
+    else if (Triangle* t = dynamic_cast<Triangle*>(&shape)) {
+        std::vector<Vec2> otherVerts = t->getVertices();
+
+        for (int i = 0; i < otherVerts.size(); i++) {
+            Vec2 edge = {
+                otherVerts[(i + 1) % 4].x - otherVerts[i].x,
+                otherVerts[(i + 1) % 4].y - otherVerts[i].y};
+            Vec2 normal = {-edge.y, edge.x};
+            
+            int length = sqrt(normal.x * normal.x + normal.y * normal.y);
+
+            Vec2 normalized = {normal.x / length, normal.y / length};
+
+            axes.push_back(normalized);
+
+        }       
+
+        for (int i = 0; i < triangleVerts.size(); i++) {
+            Vec2 edge = {
+                otherVerts[(i + 1) % 4].x - otherVerts[i].x,
+                otherVerts[(i + 1) % 4].y - otherVerts[i].y};
+
+            Vec2 normal = {-edge.y, edge.x};
+            
+            int length = sqrt(normal.x * normal.x + normal.y * normal.y);
+
+            Vec2 normalized = {normal.x / length, normal.y / length};
+
+            axes.push_back(normalized);
+
+        }
+        
+        for (Vec2 axis : axes) {
+            float otherMin = std::numeric_limits<float>::infinity();
+            float otherMax = -std::numeric_limits<float>::infinity();
+            float sqMin = std::numeric_limits<float>::infinity();
+            float sqMax = -std::numeric_limits<float>::infinity();
+
+            for (Vec2 vertex : otherVerts) {
+                float projection = dot(vertex, axis);
+
+                if (projection < otherMin) {
+                    otherMin = projection;
+                }
+                
+                if (projection > otherMax) {
+                    otherMax = projection;
+                }
+            }
+
+            for (Vec2 vertex : triangleVerts) {
+                float projection = dot(vertex, axis);
+
+                if (projection < sqMin) {
+                    sqMin = projection;
+                }
+                
+                if (projection > sqMax) {
+                    sqMax = projection;
+                }
+            }
+
+            if (otherMax < sqMin || sqMax < otherMin) {
+                return false;
+            }
+    }
+
+    return true;
+    }
+
+    return false; // Not a Square — collision check unsupported
 }
