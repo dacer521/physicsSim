@@ -211,8 +211,8 @@ bool Triangle::collideShape(Shape &shape) {
 
         for (int i = 0; i < otherVerts.size(); i++) {
             Vec2 edge = {
-                otherVerts[(i + 1) % 4].x - otherVerts[i].x,
-                otherVerts[(i + 1) % 4].y - otherVerts[i].y};
+                otherVerts[(i + 1) % 3].x - otherVerts[i].x,
+                otherVerts[(i + 1) % 3].y - otherVerts[i].y};
             Vec2 normal = {-edge.y, edge.x};
             
             int length = sqrt(normal.x * normal.x + normal.y * normal.y);
@@ -225,8 +225,8 @@ bool Triangle::collideShape(Shape &shape) {
 
         for (int i = 0; i < triangleVerts.size(); i++) {
             Vec2 edge = {
-                otherVerts[(i + 1) % 4].x - otherVerts[i].x,
-                otherVerts[(i + 1) % 4].y - otherVerts[i].y};
+                otherVerts[(i + 1) % 3].x - otherVerts[i].x,
+                otherVerts[(i + 1) % 3].y - otherVerts[i].y};
 
             Vec2 normal = {-edge.y, edge.x};
             
