@@ -38,10 +38,9 @@ int main(int argc, char* argv[]) {
     }
 
     vector<shared_ptr<Shape>> shapeList = {
-        make_shared<Square>(270.0f, 100.0f, 50.0f, 50.0f, 0.0f, -1.5f, 1.0f),
-        make_shared<Square>(320.0f, 114.0f, 50.0f, 50.0f, -5.0f, -1.5f, 1.0f),
         make_shared<Triangle>(Vec2{300.0f, 300.0f}, Vec2{340.0f, 300.0f}, Vec2{320.0f, 260.0f}, 1.2f, 0.0f, -1.0f, SDL_Color{255, 255, 255, 255}),
-        make_shared<Triangle>(Vec2{200.0f, 200.0f}, Vec2{240.0f, 200.0f}, Vec2{220.0f, 160.0f}, 1.2f, 3.0f, -1.0f, SDL_Color{255, 255, 255, 255})
+        make_shared<Square>(270.0f, 100.0f, 50.0f, 50.0f, 2.0f, -1.5f, 1.0f),
+        make_shared<Circle>(200.0f, 100.0f, 30.0f, 3.0f, 2.0f, 1.0f)
     };
 
     bool running = true;

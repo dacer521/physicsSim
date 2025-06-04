@@ -1,10 +1,12 @@
 #include "Triangle.h"
 #include "Square.h"
+#include "Circle.h"
 
 #include <algorithm>
 #include <array>
 #include <vector>
 #include <iostream>
+#include <limits>
 
 Triangle::Triangle(Vec2 v1, Vec2 v2, Vec2 v3, float m, float vx, float vy, SDL_Color c)
     : vx(vx), vy(vy), mass(m), color(c)
@@ -124,7 +126,6 @@ Vec2 Triangle::getV3() const {
     return vertices[2];
 }
 
-
 std::vector<Vec2> Triangle::getVertices() const {
     std::vector<Vec2> triangleVerts;
     triangleVerts.push_back(vertices[0]);
@@ -132,7 +133,6 @@ std::vector<Vec2> Triangle::getVertices() const {
     triangleVerts.push_back(vertices[2]);
     return triangleVerts;
 }
-
 
 float Triangle::getWidth() const { 
     float minX = std::min({ vertices[0].x, vertices[1].x, vertices[2].x });
@@ -149,11 +149,9 @@ float Triangle::getHeight() const {
 bool Triangle::collideShape(Shape &shape) {
     std::vector<Vec2> axes;
     std::vector<Vec2> triangleVerts = this->getVertices();
+    
     if (Square* s = dynamic_cast<Square*>(&shape)) {
-        
-
         std::vector<Vec2> squareVerts = s->getVertices();
-        
 
         // Triangle edge normals
         for (int i = 0; i < triangleVerts.size(); i++) {
@@ -163,6 +161,8 @@ bool Triangle::collideShape(Shape &shape) {
             };
             Vec2 normal = {-edge.y, edge.x};
             float length = std::sqrt(normal.x * normal.x + normal.y * normal.y);
+            if (length == 0) continue;
+            
             Vec2 normalized = {normal.x / length, normal.y / length};
             axes.push_back(normalized);
         }
@@ -175,6 +175,8 @@ bool Triangle::collideShape(Shape &shape) {
             };
             Vec2 normal = {-edge.y, edge.x};
             float length = std::sqrt(normal.x * normal.x + normal.y * normal.y);
+            if (length == 0) continue;
+            
             Vec2 normalized = {normal.x / length, normal.y / length};
             axes.push_back(normalized);
         }
@@ -209,40 +211,41 @@ bool Triangle::collideShape(Shape &shape) {
     else if (Triangle* t = dynamic_cast<Triangle*>(&shape)) {
         std::vector<Vec2> otherVerts = t->getVertices();
 
+        // Other triangle edge normals
         for (int i = 0; i < otherVerts.size(); i++) {
             Vec2 edge = {
                 otherVerts[(i + 1) % 3].x - otherVerts[i].x,
                 otherVerts[(i + 1) % 3].y - otherVerts[i].y};
             Vec2 normal = {-edge.y, edge.x};
             
-            int length = sqrt(normal.x * normal.x + normal.y * normal.y);
+            float length = sqrt(normal.x * normal.x + normal.y * normal.y);
+            if (length == 0) continue;
 
             Vec2 normalized = {normal.x / length, normal.y / length};
-
             axes.push_back(normalized);
-
         }       
 
+        // This triangle edge normals - FIXED: use triangleVerts, not otherVerts
         for (int i = 0; i < triangleVerts.size(); i++) {
             Vec2 edge = {
-                otherVerts[(i + 1) % 3].x - otherVerts[i].x,
-                otherVerts[(i + 1) % 3].y - otherVerts[i].y};
+                triangleVerts[(i + 1) % 3].x - triangleVerts[i].x,
+                triangleVerts[(i + 1) % 3].y - triangleVerts[i].y};
 
             Vec2 normal = {-edge.y, edge.x};
             
-            int length = sqrt(normal.x * normal.x + normal.y * normal.y);
+            float length = sqrt(normal.x * normal.x + normal.y * normal.y);
+            if (length == 0) continue;
 
             Vec2 normalized = {normal.x / length, normal.y / length};
-
             axes.push_back(normalized);
-
         }
         
+        // SAT projection testing
         for (Vec2 axis : axes) {
             float otherMin = std::numeric_limits<float>::infinity();
             float otherMax = -std::numeric_limits<float>::infinity();
-            float sqMin = std::numeric_limits<float>::infinity();
-            float sqMax = -std::numeric_limits<float>::infinity();
+            float thisMin = std::numeric_limits<float>::infinity();
+            float thisMax = -std::numeric_limits<float>::infinity();
 
             for (Vec2 vertex : otherVerts) {
                 float projection = dot(vertex, axis);
@@ -259,22 +262,53 @@ bool Triangle::collideShape(Shape &shape) {
             for (Vec2 vertex : triangleVerts) {
                 float projection = dot(vertex, axis);
 
-                if (projection < sqMin) {
-                    sqMin = projection;
+                if (projection < thisMin) {
+                    thisMin = projection;
                 }
                 
-                if (projection > sqMax) {
-                    sqMax = projection;
+                if (projection > thisMax) {
+                    thisMax = projection;
                 }
             }
 
-            if (otherMax < sqMin || sqMax < otherMin) {
+            if (otherMax < thisMin || thisMax < otherMin) {
                 return false;
             }
+        }
+
+        return true;
     }
 
-    return true;
-    }
+    else if (Circle* c = dynamic_cast<Circle*>(&shape)) {
+        std::vector<Vec2> verts = getVertices();
 
-    return false; // Not a Square — collision check unsupported
+        for (int i = 0; i < verts.size(); i++) {
+            Vec2 start = verts[i];
+            Vec2 end = verts[(i + 1) % 3];
+
+            float dx = end.x - start.x;
+            float dy = end.y - start.y;
+
+            //pixel density
+            float steps = std::max(std::abs(dx), std::abs(dy));
+            if (steps == 0) continue;
+
+            for (int j = 0; j < steps; j++) {
+                float t_param = static_cast<float>(j) / steps; //normalized interpolation parameter. Controls how far between start and end I am. 0 is start point 1 is end point.
+
+                float pointX = start.x + t_param * dx;
+                float pointY = start.y + t_param * dy;
+
+                float circleVal = pow((pointX - c->getX()), 2) + pow((pointY - c->getY()), 2);
+
+                if (circleVal <= pow(c->getRadius(), 2)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+    
+    return false; // Not a supported shape type
 }

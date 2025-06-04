@@ -26,6 +26,8 @@ public:
     float getHeight() const override;
     float getWidth() const override;
 
+    float getRadius();
+
     std::vector<Vec2> getVertices() const override;
     bool collideShape(Shape& other) override;
 

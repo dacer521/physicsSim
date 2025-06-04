@@ -2,6 +2,12 @@
 #include <SDL_render.h>
 #include <cmath>
 #include <vector>
+#include <algorithm>
+
+#include "Square.h"
+#include "Triangle.h"
+
+using namespace std;
 
 Circle::Circle(float x, float y, float r, float vx, float vy, float mass)
     : x(x), y(y), r(r), vx(vx), vy(vy), mass(mass) {}
@@ -64,6 +70,8 @@ void Circle::setVy(float v) { vy = v; }
 float Circle::getX() const { return x; }
 float Circle::getY() const { return y; }
 
+float Circle::getRadius() {return r;}
+
 float Circle::getHeight() const { return r * 2; }
 float Circle::getWidth() const { return r * 2; }
 
@@ -78,6 +86,74 @@ std::vector<Vec2> Circle::getVertices() const {
 }
 
 bool Circle::collideShape(Shape& other) {
-    // TODO: implement actual collision
+    if (Circle* c = dynamic_cast<Circle*>(&other)) {
+        if (sqrt(pow((c->getX() - getX()), 2) + pow((c->getY() - getY()), 2)) <= getRadius() + c->getRadius()) {
+            return true;
+        }
+        return false;
+    }
+
+    else if (Square* s = dynamic_cast<Square*>(&other)) {
+       std::vector<Vec2> verts = s->getVertices();
+
+       for (int i = 0; i < verts.size(); i++) {
+            Vec2 start = verts[i];
+            Vec2 end = verts[(i + 1) % 4];
+
+            float dx = end.x - start.x;
+            float dy = end.y - start.y;
+
+            //pixel density
+            float steps = std::max(std::abs(dx), std::abs(dy));
+            if (steps == 0) continue;
+
+            for (int j = 0; j < steps; j++) {
+                float t_param = static_cast<float>(j) / steps; //normalized interpolation parameter. Controls how far between start and end I am. 0 is start point 1 is end point.
+
+                float pointX = start.x + t_param * dx;
+                float pointY = start.y + t_param * dy;
+
+                float circleVal = pow((pointX - getX()), 2) + pow((pointY - getY()), 2);
+
+                if (circleVal <= pow(getRadius(), 2)) {
+                    return true;
+                }
+            }
+       }
+
+       return false;
+    }
+
+    else if (Triangle* t = dynamic_cast<Triangle*>(&other)) {
+        std::vector<Vec2> verts = t->getVertices(); // FIXED: was using 's' instead of 't'
+
+       for (int i = 0; i < verts.size(); i++) {
+            Vec2 start = verts[i];
+            Vec2 end = verts[(i + 1) % 3];
+
+            float dx = end.x - start.x;
+            float dy = end.y - start.y;
+
+            //pixel density
+            float steps = std::max(std::abs(dx), std::abs(dy)); 
+
+            if (steps == 0) continue;
+
+            for (int j = 0; j < steps; j++) {
+                float t_param = static_cast<float>(j) / steps; //normalized interpolation parameter. Controls how far between start and end I am. 0 is start point 1 is end point.
+
+                float pointX = start.x + t_param * dx;
+                float pointY = start.y + t_param * dy;
+
+                float circleVal = pow((pointX - getX()), 2) + pow((pointY - getY()), 2);
+
+                if (circleVal <= pow(getRadius(), 2)) {
+                    return true;
+                }
+            }
+       }
+
+       return false;
+    }
     return false;
 }
