@@ -4,10 +4,14 @@
 #include <vector>
 #include <limits>
 #include <iostream>
+#include <optional>
 
 #include "Square.h"
 #include "Triangle.h"
 #include "Circle.h"
+#include "Shape.h"
+
+using namespace std;
 
 Square::Square(float x, float y, float w, float h, float vx, float vy, float mass)
     : x(x), y(y), width(w), height(h), vx(vx), vy(vy), mass(mass) {}
@@ -30,25 +34,113 @@ void Square::draw(SDL_Renderer* renderer, SDL_Color color)  {
     SDL_RenderFillRect(renderer, &rect);
 }
 
-void Square::checkCollision(int screenWidth, int screenHeight) {
+
+void Square::checkCollision(int screenWidth, int screenHeight, vector<shared_ptr<Shape>> shapeList, float elasticModifier) {
+    // Boundary collision
     if (y + height >= screenHeight) {
         y = screenHeight - height;
-        vy = -abs(vy);
+        vy = -abs(vy) * elasticModifier;
     }
 
     if (y <= 0) {
         y = 0;
-        vy = abs(vy);
+        vy = abs(vy) * elasticModifier;
     }
 
     if (x + width >= screenWidth) {
         x = screenWidth - width;
-        vx = -abs(vx);
+        vx = -abs(vx) * elasticModifier;
     }
 
     if (x <= 0) {
         x = 0;
-        vx = abs(vx);
+        vx = abs(vx) * elasticModifier;
+    }
+
+    // Shape-to-shape collision - FIXED
+    for (auto& shape : shapeList) {
+        if (shape.get() == this) continue;
+
+        if (Circle* c = dynamic_cast<Circle*>(shape.get())) {
+            // Circle-Square collision
+            float squareCenterX = x + width / 2;
+            float squareCenterY = y + height / 2;
+            float dx = squareCenterX - c->getX();
+            float dy = squareCenterY - c->getY();
+            
+            // Find closest point on square to circle center
+            float closestX = std::max(x, std::min(c->getX(), x + width));
+            float closestY = std::max(y, std::min(c->getY(), y + height));
+            
+            dx = c->getX() - closestX;
+            dy = c->getY() - closestY;
+            float dist = std::sqrt(dx * dx + dy * dy);
+            
+            if (dist < c->getRadius() && dist > 0.001f) {
+                float overlap = c->getRadius() - dist;
+                float nx = dx / dist;
+                float ny = dy / dist;
+                
+                // Complete separation with buffer
+                float separation = overlap + 2.0f;
+                float squareSeparation = separation * 0.5f;
+                float circleSeparation = separation * 0.5f;
+                
+                x -= nx * squareSeparation;
+                y -= ny * squareSeparation;
+                c->setX(c->getX() + nx * circleSeparation);
+                c->setY(c->getY() + ny * circleSeparation);
+                
+                // Velocity reflection
+                float relVelX = vx - c->getVx();
+                float relVelY = vy - c->getVy();
+                float velAlongNormal = relVelX * (-nx) + relVelY * (-ny);
+                
+                if (velAlongNormal > 0) continue;  // Separating
+                
+                float impulse = -(1 + elasticModifier) * velAlongNormal;
+                impulse /= (1.0f/mass + 1.0f/c->getMass());
+                
+                vx += impulse * (-nx) / mass;
+                vy += impulse * (-ny) / mass;
+                c->setVx(c->getVx() - impulse * (-nx) / c->getMass());
+                c->setVy(c->getVy() - impulse * (-ny) / c->getMass());
+            }
+        } else {
+            // SAT collision with other polygons - FIXED
+            vector<Vec2> vertsA = getVertices();
+            vector<Vec2> vertsB = shape->getVertices();
+            optional<Vec2> mtv = getMTV(vertsA, vertsB);
+            
+            if (mtv.has_value()) {
+                float mtvLength = std::sqrt(mtv->x * mtv->x + mtv->y * mtv->y);
+                if (mtvLength > 0.001f) {
+                    Vec2 normalizedMtv = {mtv->x / mtvLength, mtv->y / mtvLength};
+                    float separationDistance = mtvLength + 2.0f;  // Add buffer
+                    
+                    // Complete separation
+                    x += normalizedMtv.x * separationDistance * 0.5f;
+                    y += normalizedMtv.y * separationDistance * 0.5f;
+                    shape->setX(shape->getX() - normalizedMtv.x * separationDistance * 0.5f);
+                    shape->setY(shape->getY() - normalizedMtv.y * separationDistance * 0.5f);
+                    
+                    // Velocity collision response
+                    float relVelX = vx - shape->getVx();
+                    float relVelY = vy - shape->getVy();
+                    float velAlongNormal = relVelX * normalizedMtv.x + relVelY * normalizedMtv.y;
+                    
+                    if (velAlongNormal > 0) continue;  // Separating
+                    
+                    float impulse = -(1 + elasticModifier) * velAlongNormal;
+                    impulse /= (1.0f/mass + 1.0f/shape->getMass());  // Assuming mass exists
+                    
+                    vx += impulse * normalizedMtv.x / mass;
+                    vy += impulse * normalizedMtv.y / mass;
+                    shape->setVx(shape->getVx() - impulse * normalizedMtv.x / mass);
+                    shape->setVy(shape->getVy() - impulse * normalizedMtv.y / mass);
+                }
+            }
+        }
     }
 }
 
@@ -61,187 +153,57 @@ std::vector<Vec2> Square::getVertices() const {
     verts.push_back({getX(), getY() + getHeight()});
 
     return verts;
-}
+}std::optional<Vec2> Square::getMTV(const std::vector<Vec2>& vertsA, const std::vector<Vec2>& vertsB) {
+    float minOverlap = std::numeric_limits<float>::infinity();
+    Vec2 mtvAxis;
 
-bool Square::collideShape(Shape &shape) {
     std::vector<Vec2> axes;
-
-    std::vector<Vec2> squareVerts = getVertices();
-    
-    if (Triangle* t = dynamic_cast<Triangle*>(&shape)) {
-        std::vector<Vec2> triangleVerts = t->getVertices();
-
-        // Triangle edge normals
-        for (int i = 0; i < triangleVerts.size(); i++) {
-            Vec2 edge = {
-                triangleVerts[(i + 1) % 3].x - triangleVerts[i].x,
-                triangleVerts[(i + 1) % 3].y - triangleVerts[i].y};
-            Vec2 normal = {-edge.y, edge.x};
-            
-            float length = sqrt(normal.x * normal.x + normal.y * normal.y);
-            if (length == 0) continue;
-
-            Vec2 normalized = {normal.x / length, normal.y / length};
-            axes.push_back(normalized);
-        }       
-
-        // Square edge normals - FIXED: use squareVerts, not triangleVerts
-        for (int i = 0; i < squareVerts.size(); i++) {
-            Vec2 edge = {
-                squareVerts[(i + 1) % 4].x - squareVerts[i].x,
-                squareVerts[(i + 1) % 4].y - squareVerts[i].y};
-
-            Vec2 normal = {-edge.y, edge.x};
-            
-            float length = sqrt(normal.x * normal.x + normal.y * normal.y);
-            if (length == 0) continue;
-
-            Vec2 normalized = {normal.x / length, normal.y / length};
-            axes.push_back(normalized);
-        }
-        
-        // SAT projection testing
-        for (Vec2 axis : axes) {
-            float triMin = std::numeric_limits<float>::infinity();
-            float triMax = -std::numeric_limits<float>::infinity();
-            float sqMin = std::numeric_limits<float>::infinity();
-            float sqMax = -std::numeric_limits<float>::infinity();
-
-            for (Vec2 vertex : triangleVerts) {
-                float projection = dot(vertex, axis);
-
-                if (projection < triMin) {
-                    triMin = projection;
-                }
-                
-                if (projection > triMax) {
-                    triMax = projection;
-                }
-            }
-
-            for (Vec2 vertex : squareVerts) {
-                float projection = dot(vertex, axis);
-
-                if (projection < sqMin) {
-                    sqMin = projection;
-                }
-                
-                if (projection > sqMax) {
-                    sqMax = projection;
-                }
-            }
-
-            if (triMax < sqMin || sqMax < triMin) {
-                return false;
-            }
-        }
-
-        return true; // No separating axis found
+    for (int i = 0; i < vertsA.size(); ++i) {
+        Vec2 edge = {vertsA[(i + 1) % vertsA.size()].x - vertsA[i].x, vertsA[(i + 1) % vertsA.size()].y - vertsA[i].y};
+        Vec2 normal = {-edge.y, edge.x};
+        float length = std::sqrt(normal.x * normal.x + normal.y * normal.y);
+        axes.push_back({normal.x / length, normal.y / length});
+    }
+    for (int i = 0; i < vertsB.size(); ++i) {
+        Vec2 edge = {vertsB[(i + 1) % vertsB.size()].x - vertsB[i].x, vertsB[(i + 1) % vertsB.size()].y - vertsB[i].y};
+        Vec2 normal = {-edge.y, edge.x};
+        float length = std::sqrt(normal.x * normal.x + normal.y * normal.y);
+        axes.push_back({normal.x / length, normal.y / length});
     }
 
-    else if (Square* s = dynamic_cast<Square*>(&shape)) {
-        std::vector<Vec2> otherVerts = s->getVertices();
-
-        // Other square edge normals
-        for (int i = 0; i < otherVerts.size(); i++) {
-            Vec2 edge = {
-                otherVerts[(i + 1) % 4].x - otherVerts[i].x,
-                otherVerts[(i + 1) % 4].y - otherVerts[i].y};
-            Vec2 normal = {-edge.y, edge.x};
-            
-            float length = sqrt(normal.x * normal.x + normal.y * normal.y);
-            if (length == 0) continue;
-
-            Vec2 normalized = {normal.x / length, normal.y / length};
-            axes.push_back(normalized);
-        }       
-
-        // This square edge normals - FIXED: use squareVerts, not otherVerts
-        for (int i = 0; i < squareVerts.size(); i++) {
-            Vec2 edge = {
-                squareVerts[(i + 1) % 4].x - squareVerts[i].x,
-                squareVerts[(i + 1) % 4].y - squareVerts[i].y};
-
-            Vec2 normal = {-edge.y, edge.x};
-            
-            float length = sqrt(normal.x * normal.x + normal.y * normal.y);
-            if (length == 0) continue;
-
-            Vec2 normalized = {normal.x / length, normal.y / length};
-            axes.push_back(normalized);
-        }
-        
-        // SAT projection testing
-        for (Vec2 axis : axes) {
-            float otherMin = std::numeric_limits<float>::infinity();
-            float otherMax = -std::numeric_limits<float>::infinity();
-            float sqMin = std::numeric_limits<float>::infinity();
-            float sqMax = -std::numeric_limits<float>::infinity();
-
-            for (Vec2 vertex : otherVerts) {
-                float projection = dot(vertex, axis);
-
-                if (projection < otherMin) {
-                    otherMin = projection;
-                }
-                
-                if (projection > otherMax) {
-                    otherMax = projection;
-                }
-            }
-
-            for (Vec2 vertex : squareVerts) {
-                float projection = dot(vertex, axis);
-
-                if (projection < sqMin) {
-                    sqMin = projection;
-                }
-                
-                if (projection > sqMax) {
-                    sqMax = projection;
-                }
-            }
-
-            if (otherMax < sqMin || sqMax < otherMin) {
-                return false;
-            }
+    for (const auto& axis : axes) {
+        float minA = vertsA[0].x * axis.x + vertsA[0].y * axis.y;
+        float maxA = minA;
+        for (const auto& v : vertsA) {
+            float proj = v.x * axis.x + v.y * axis.y;
+            minA = std::min(minA, proj);
+            maxA = std::max(maxA, proj);
         }
 
-        return true; // FIXED: Added missing return statement
+        float minB = vertsB[0].x * axis.x + vertsB[0].y * axis.y;
+        float maxB = minB;
+        for (const auto& v : vertsB) {
+            float proj = v.x * axis.x + v.y * axis.y;
+            minB = std::min(minB, proj);
+            maxB = std::max(maxB, proj);
+        }
+
+        if (maxA < minB || maxB < minA) return std::nullopt;
+
+        float overlap = std::min(maxA, maxB) - std::max(minA, minB);
+        if (overlap < minOverlap) {
+            minOverlap = overlap;
+            mtvAxis = axis;
+            float centerA = (minA + maxA) / 2;
+            float centerB = (minB + maxB) / 2;
+            if (centerA > centerB) {
+                mtvAxis.x = -mtvAxis.x;
+                mtvAxis.y = -mtvAxis.y;
+            }
+        }
     }
 
-    else if (Circle* c = dynamic_cast<Circle*>(&shape)) {
-        std::vector<Vec2> verts = getVertices();
-
-        for (int i = 0; i < verts.size(); i++) {
-            Vec2 start = verts[i];
-            Vec2 end = verts[(i + 1) % 4];
-
-            float dx = end.x - start.x;
-            float dy = end.y - start.y;
-
-            //pixel density
-            float steps = std::max(std::abs(dx), std::abs(dy));
-            if (steps == 0) continue;
-
-            for (int j = 0; j < steps; j++) {
-                float t_param = static_cast<float>(j) / steps; //normalized interpolation parameter. Controls how far between start and end I am. 0 is start point 1 is end point.
-
-                float pointX = start.x + t_param * dx;
-                float pointY = start.y + t_param * dy;
-
-                float circleVal = pow((pointX - c->getX()), 2) + pow((pointY - c->getY()), 2);
-
-                if (circleVal <= pow(c->getRadius(), 2)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    return false;
+    return Vec2{mtvAxis.x * minOverlap, mtvAxis.y * minOverlap};
 }
 
 float Square::getVx() const { return vx; }
@@ -255,3 +217,8 @@ float Square::getY() const { return y; }
 
 float Square::getHeight() const { return height; }
 float Square::getWidth() const { return width; }
+
+void Square::setX(float x1) {x = x1;}
+void Square::setY(float y1) {y = y1;}
+
+float Square::getMass() const {return mass;}

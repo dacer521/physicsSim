@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "Square.h"
+#include "Shape.h"
 #include "Triangle.h"
 
 using namespace std;
@@ -38,122 +39,168 @@ void Circle::draw(SDL_Renderer* renderer ,SDL_Color color) {
     }
 }
 
-void Circle::checkCollision(int screenWidth, int screenHeight) {
+std::optional<Vec2> Circle::getMTV(const std::vector<Vec2>& vertsA, const std::vector<Vec2>& vertsB) {
+    if (vertsA.empty()) return std::nullopt;
+
+    Vec2 center = vertsA[0];
+    float minOverlap = std::numeric_limits<float>::max();
+    Vec2 smallestAxis;
+
+    for (int i = 0; i < vertsB.size(); ++i) {
+        Vec2 edge = {
+            vertsB[(i + 1) % vertsB.size()].x - vertsB[i].x,
+            vertsB[(i + 1) % vertsB.size()].y - vertsB[i].y
+        };
+        Vec2 axis = {-edge.y, edge.x};
+        float len = std::sqrt(axis.x * axis.x + axis.y * axis.y);
+        axis = {axis.x / len, axis.y / len};
+
+        float minB = INFINITY, maxB = -INFINITY;
+        for (const auto& v : vertsB) {
+            float proj = v.x * axis.x + v.y * axis.y;
+            minB = std::min(minB, proj);
+            maxB = std::max(maxB, proj);
+        }
+
+        float centerProj = center.x * axis.x + center.y * axis.y;
+        float minA = centerProj - r;
+        float maxA = centerProj + r;
+
+        float overlap = std::min(maxA, maxB) - std::max(minA, minB);
+        if (overlap <= 0) return std::nullopt;
+        if (overlap < minOverlap) {
+            minOverlap = overlap;
+            smallestAxis = axis;
+        }
+    }
+
+    return Vec2{smallestAxis.x * minOverlap, smallestAxis.y * minOverlap};
+}
+
+float Circle::getRadius() {
+    return r;
+}
+void Circle::checkCollision(int screenWidth, int screenHeight, std::vector<std::shared_ptr<Shape>> shapeList, float elasticModifier) {
+    // Boundary collision detection
     if (y + r >= screenHeight) {
         y = screenHeight - r;
-        vy = -abs(vy);
+        vy = -abs(vy) * elasticModifier;
     }
-
+    
     if (y - r <= 0) {
         y = r;
-        vy = abs(vy);
+        vy = abs(vy) * elasticModifier;
     }
-
+    
     if (x + r >= screenWidth) {
         x = screenWidth - r;
-        vx = -abs(vx);
+        vx = -abs(vx) * elasticModifier;
     }
-
+    
     if (x - r <= 0) {
         x = r;
-        vx = abs(vx);
+        vx = abs(vx) * elasticModifier;
+    }
+
+    // Shape-to-shape collision - FIXED
+    for (auto& shape : shapeList) {
+        if (shape.get() == this) continue;
+
+        if (Circle* c = dynamic_cast<Circle*>(shape.get())) {
+            float dx = x - c->getX();
+            float dy = y - c->getY();
+            float dist = std::sqrt(dx * dx + dy * dy);
+            float totalRadius = r + c->getRadius();
+
+            if (dist < totalRadius && dist > 0.001f) {  // Small epsilon to avoid division by zero
+                float overlap = totalRadius - dist;
+                
+                // Normalize direction
+                float nx = dx / dist;
+                float ny = dy / dist;
+                
+                // Separate objects COMPLETELY - move them apart by the full overlap plus a small buffer
+                float separation = (overlap + 2.0f) * 0.5f;  // Added buffer and ensure full separation
+                x += nx * separation;
+                y += ny * separation;
+                c->setX(c->getX() - nx * separation);
+                c->setY(c->getY() - ny * separation);
+                
+                // Calculate relative velocity
+                float rvx = vx - c->getVx();
+                float rvy = vy - c->getVy();
+                
+                // Calculate relative velocity along normal
+                float velAlongNormal = rvx * nx + rvy * ny;
+                
+                // Don't resolve if velocities are separating
+                if (velAlongNormal > 0) continue;
+                
+                // Calculate impulse scalar
+                float impulse = -(1 + elasticModifier) * velAlongNormal;
+                impulse /= (1.0f/mass + 1.0f/c->mass);
+                
+                // Apply impulse
+                vx += impulse * nx / mass;
+                vy += impulse * ny / mass;
+                c->setVx(c->getVx() - impulse * nx / c->mass);
+                c->setVy(c->getVy() - impulse * ny / c->mass);
+            }
+        } else {
+            // Collision with other shapes - FIXED
+            std::vector<Vec2> circleVerts = getVertices();
+            std::vector<Vec2> otherVerts = shape->getVertices();
+
+            auto mtvOpt = shape->getMTV(circleVerts, otherVerts);
+            if (mtvOpt) {
+                Vec2 mtv = *mtvOpt;
+                
+                // Ensure complete separation with buffer
+                float mtvLength = std::sqrt(mtv.x * mtv.x + mtv.y * mtv.y);
+                if (mtvLength > 0.001f) {  // Avoid zero-length MTV
+                    Vec2 normalizedMtv = {mtv.x / mtvLength, mtv.y / mtvLength};
+                    float separationDistance = mtvLength + 2.0f;  // Add buffer
+                    
+                    x += normalizedMtv.x * separationDistance * 0.5f;
+                    y += normalizedMtv.y * separationDistance * 0.5f;
+                    shape->setX(shape->getX() - normalizedMtv.x * separationDistance * 0.5f);
+                    shape->setY(shape->getY() - normalizedMtv.y * separationDistance * 0.5f);
+                    
+                    // Apply velocity changes only if moving towards collision
+                    float dot = vx * normalizedMtv.x + vy * normalizedMtv.y;
+                    if (dot < 0) {  // Moving towards collision
+                        vx -= dot * normalizedMtv.x * elasticModifier;
+                        vy -= dot * normalizedMtv.y * elasticModifier;
+                    }
+                }
+            }
+        }
     }
 }
 
-float Circle::getVx() const { return vx; }
-void Circle::setVx(float v) { vx = v; }
+void Circle::setX(float x1) {
+    x = x1;
+}
 
-float Circle::getVy() const { return vy; }
+void Circle::setY(float y1) {
+    y = y1;
+}
+
+void Circle::setVx(float v) { vx = v; }
 void Circle::setVy(float v) { vy = v; }
 
-// Return center coordinates for physics calculations  
+float Circle::getVx() const { return vx; }
+float Circle::getVy() const { return vy; }
+
 float Circle::getX() const { return x; }
 float Circle::getY() const { return y; }
 
-float Circle::getRadius() {return r;}
-
-float Circle::getHeight() const { return r * 2; }
 float Circle::getWidth() const { return r * 2; }
+float Circle::getHeight() const { return r * 2; }
 
 std::vector<Vec2> Circle::getVertices() const {
-    // Simplified approximation: bounding box
-    return {
-        {x - r, y - r},
-        {x + r, y - r},
-        {x + r, y + r},
-        {x - r, y + r}
-    };
+    // For SAT compatibility, just return 1 point or approximate polygon if needed
+    return { {x, y} };
 }
 
-bool Circle::collideShape(Shape& other) {
-    if (Circle* c = dynamic_cast<Circle*>(&other)) {
-        if (sqrt(pow((c->getX() - getX()), 2) + pow((c->getY() - getY()), 2)) <= getRadius() + c->getRadius()) {
-            return true;
-        }
-        return false;
-    }
-
-    else if (Square* s = dynamic_cast<Square*>(&other)) {
-       std::vector<Vec2> verts = s->getVertices();
-
-       for (int i = 0; i < verts.size(); i++) {
-            Vec2 start = verts[i];
-            Vec2 end = verts[(i + 1) % 4];
-
-            float dx = end.x - start.x;
-            float dy = end.y - start.y;
-
-            //pixel density
-            float steps = std::max(std::abs(dx), std::abs(dy));
-            if (steps == 0) continue;
-
-            for (int j = 0; j < steps; j++) {
-                float t_param = static_cast<float>(j) / steps; //normalized interpolation parameter. Controls how far between start and end I am. 0 is start point 1 is end point.
-
-                float pointX = start.x + t_param * dx;
-                float pointY = start.y + t_param * dy;
-
-                float circleVal = pow((pointX - getX()), 2) + pow((pointY - getY()), 2);
-
-                if (circleVal <= pow(getRadius(), 2)) {
-                    return true;
-                }
-            }
-       }
-
-       return false;
-    }
-
-    else if (Triangle* t = dynamic_cast<Triangle*>(&other)) {
-        std::vector<Vec2> verts = t->getVertices(); // FIXED: was using 's' instead of 't'
-
-       for (int i = 0; i < verts.size(); i++) {
-            Vec2 start = verts[i];
-            Vec2 end = verts[(i + 1) % 3];
-
-            float dx = end.x - start.x;
-            float dy = end.y - start.y;
-
-            //pixel density
-            float steps = std::max(std::abs(dx), std::abs(dy)); 
-
-            if (steps == 0) continue;
-
-            for (int j = 0; j < steps; j++) {
-                float t_param = static_cast<float>(j) / steps; //normalized interpolation parameter. Controls how far between start and end I am. 0 is start point 1 is end point.
-
-                float pointX = start.x + t_param * dx;
-                float pointY = start.y + t_param * dy;
-
-                float circleVal = pow((pointX - getX()), 2) + pow((pointY - getY()), 2);
-
-                if (circleVal <= pow(getRadius(), 2)) {
-                    return true;
-                }
-            }
-       }
-
-       return false;
-    }
-    return false;
-}
+float Circle::getMass() const {return mass;}

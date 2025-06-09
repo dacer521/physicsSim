@@ -1,10 +1,10 @@
-#include <SDL.h>
-#include <SDL_render.h>
-#include <SDL_keyboard.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_render.h>
+#include <SDL3/SDL_events.h>
 #include <iostream>
-#include <math.h>
 #include <vector>
 #include <memory>
+#include <cmath>
 
 #include "Shape.h"
 #include "Square.h"
@@ -14,21 +14,21 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
+    // Initialize SDL with error checking
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         cerr << "SDL_Init Error: " << SDL_GetError() << endl;
         return 1;
     }
 
-    int width = 640;
-    int height = 480;
-
-    SDL_Window* window = SDL_CreateWindow("Physics Sim", width, height, 0);
+    // Create window with proper SDL3 syntax
+    SDL_Window* window = SDL_CreateWindow("Physics Sim", 640, 480, SDL_WINDOW_RESIZABLE);
     if (!window) {
         cerr << "SDL_CreateWindow Error: " << SDL_GetError() << endl;
         SDL_Quit();
         return 1;
     }
 
+    // Create renderer with proper SDL3 syntax
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) {
         cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << endl;
@@ -37,20 +37,22 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    int width = 640, height = 480;
     vector<shared_ptr<Shape>> shapeList = {
-        make_shared<Triangle>(Vec2{300.0f, 300.0f}, Vec2{340.0f, 300.0f}, Vec2{320.0f, 260.0f}, 1.2f, 1.0f, -1.0f, SDL_Color{255, 255, 255, 255}),
-        make_shared<Square>(270.0f, 100.0f, 50.0f, 50.0f, 2.0f, -1.5f, 1.0f),
-        make_shared<Circle>(200.0f, 100.0f, 30.0f, 3.0f, 2.0f, 1.0f)
+        make_shared<Triangle>( Vec2{300,300}, Vec2{320,260}, Vec2{340,300}, 1.2f, 1.0f, -1.0f, SDL_Color{255,0,0,255}),
+        // make_shared<Square>(270.0f, 100.0f, 50.0f, 50.0f, 4.0f, 1.5f, 1.0f),
+        // make_shared<Circle>(200.0f, 100.0f, 30.0f, 3.0f, -2.0f, 1.0f)
     };
 
     bool running = true;
-    int FPS = 60;
-    float FRAME_TARGET_TIME = 1000.0f / FPS;
-    float last_frame_time = 0;
+    const int FPS = 60;
+    const float FRAME_TARGET_TIME = 1000.0f / FPS;
+    Uint64 last_ticks = SDL_GetTicks();
 
     while (running) {
-        float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
-        last_frame_time = SDL_GetTicks();
+        Uint64 current_ticks = SDL_GetTicks();
+        float delta_time = (current_ticks - last_ticks) / 1000.0f;
+        last_ticks = current_ticks;
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -59,38 +61,37 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // Clear screen
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
-        // Update all shapes and check bounds
+        // Update physics
         for (auto& shape : shapeList) {
             shape->update(delta_time);
-            shape->setVy(shape->getVy() + 1.0f);
-            shape->checkCollision(width, height);
+            shape->setVy(shape->getVy() + 981.0f * delta_time); 
         }
 
-        // Determine collision status for each shape
-        vector<bool> isColliding(shapeList.size(), false);
-        for (size_t i = 0; i < shapeList.size(); ++i) {
-            for (size_t j = 0; j < shapeList.size(); ++j) {
-                if (i != j && shapeList[i]->collideShape(*shapeList[j])) {
-                    isColliding[i] = true;
-                    isColliding[j] = true;
-                }
-            }
+        // Check collisions
+        for (auto& shape : shapeList) {
+            shape->checkCollision(width, height, shapeList, 0.9f);
         }
 
-        // Draw all shapes based on collision status
-        for (size_t i = 0; i < shapeList.size(); ++i) {
-            SDL_Color color = isColliding[i] ? SDL_Color{255, 255, 255, 255} : SDL_Color{255, 0, 0, 255};
-            shapeList[i]->draw(renderer, color);
-        }
+        // Draw shapes with colors
+        for (auto& shape : shapeList) {
+            if (dynamic_cast<Triangle*>(shape.get()))
+                shape->draw(renderer, SDL_Color{255, 255, 255, 255});
+            else if (dynamic_cast<Square*>(shape.get()))
+                shape->draw(renderer, SDL_Color{0, 255, 0, 255});
+            else if (dynamic_cast<Circle*>(shape.get()))
+                shape->draw(renderer, SDL_Color{0, 0, 255, 255});
+}
 
         SDL_RenderPresent(renderer);
 
-        float frame_time = SDL_GetTicks() - last_frame_time;
+        // Frame rate limiting
+        float frame_time = SDL_GetTicks() - current_ticks;
         if (frame_time < FRAME_TARGET_TIME) {
-            SDL_Delay(FRAME_TARGET_TIME - frame_time);
+            SDL_Delay((Uint32)(FRAME_TARGET_TIME - frame_time));
         }
     }
 

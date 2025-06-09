@@ -1,9 +1,13 @@
+// Triangle.h
 #pragma once
 #include <SDL3/SDL.h>
 #include <cmath>
 #include "Shape.h"
 #include <array>
 #include <vector>
+#include <optional>
+
+
 
 class Triangle : public Shape {
 public:
@@ -16,22 +20,22 @@ public:
 
     void update(float deltaTime) override;
     void applyForce(float fx, float fy) override;
-    void drawTriangle(SDL_Renderer* renderer , SDL_Color color) const;
+    void drawTriangle(SDL_Renderer* renderer, SDL_Color color) const;
     void draw(SDL_Renderer* renderer, SDL_Color color) override;
-    void checkCollision(int screenWidth, int screenHeight) override;
+    void checkCollision(int screenWidth, int screenHeight, std::vector<std::shared_ptr<Shape>> shapeList, float elasticModifier) override;
 
-    bool collideShape(Shape &shape) override;
-
-
-    
     float getVy() const override;
     void setVy(float v) override;
+
     float getVx() const override;
     void setVx(float v) override;
 
+    float getMass() const override;
+
+    // Return centroid X and Y for correct separation
     float getX() const override;
     float getY() const override;
-    
+
     Vec2 getV1() const;
     Vec2 getV2() const;
     Vec2 getV3() const;
@@ -41,6 +45,8 @@ public:
     float getWidth() const override;
     float getHeight() const override;
 
+    void setX(float x1) override;
+    void setY(float y1) override;
 
-    // bool collideShape(Shape& other) override;
+    std::optional<Vec2> getMTV(const std::vector<Vec2>& vertsA, const std::vector<Vec2>& vertsB) override;
 };

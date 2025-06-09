@@ -13,7 +13,8 @@ public:
     void applyForce(float fx, float fy) override;
     void draw(SDL_Renderer* renderer, SDL_Color color) override;
 
-    void checkCollision(int screenWidth, int screenHeight) override;
+    void checkCollision(int screenWidth, int screenHeight, std::vector<std::shared_ptr<Shape>> shapeList, float elasticModifier) override;
+
 
     float getVx() const override;
     void setVx(float v) override;
@@ -29,7 +30,15 @@ public:
     float getRadius();
 
     std::vector<Vec2> getVertices() const override;
-    bool collideShape(Shape& other) override;
+
+
+
+    void setX(float x1) override;
+    void setY(float y1) override;
+
+    std::optional<Vec2> getMTV(const std::vector<Vec2>& vertsA, const std::vector<Vec2>& vertsB) override; 
+
+    float getMass() const override;
 
 private:
     float x, y;
