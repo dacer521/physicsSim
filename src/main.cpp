@@ -39,9 +39,9 @@ int main(int argc, char* argv[]) {
 
     int width = 640, height = 480;
     vector<shared_ptr<Shape>> shapeList = {
-        make_shared<Triangle>( Vec2{300,300}, Vec2{320,260}, Vec2{340,300}, 1.2f, 1.0f, -1.0f, SDL_Color{255,0,0,255}),
-        // make_shared<Square>(270.0f, 100.0f, 50.0f, 50.0f, 4.0f, 1.5f, 1.0f),
-        // make_shared<Circle>(200.0f, 100.0f, 30.0f, 3.0f, -2.0f, 1.0f)
+        make_shared<Square>(270.0f, 100.0f, 50.0f, 50.0f, 4.0f, 1.5f, 1.0f),
+        make_shared<Triangle>(Vec2{100,100}, Vec2{150,50}, Vec2{200,100}, 1.2f, 1.0f, -1.0f, SDL_Color{255,0,0,255}),
+        make_shared<Circle>(200.0f, 100.0f, 30.0f, 3.0f, -2.0f, 1.0f)
     };
 
     bool running = true;
@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
         // Draw shapes with colors
         for (auto& shape : shapeList) {
             if (dynamic_cast<Triangle*>(shape.get()))
-                shape->draw(renderer, SDL_Color{255, 255, 255, 255});
+                shape->draw(renderer, SDL_Color{255, 0, 0, 255});
             else if (dynamic_cast<Square*>(shape.get()))
                 shape->draw(renderer, SDL_Color{0, 255, 0, 255});
             else if (dynamic_cast<Circle*>(shape.get()))

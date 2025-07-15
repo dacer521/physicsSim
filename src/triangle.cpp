@@ -30,30 +30,22 @@ void Triangle::update(float deltaTime) {
 }
 
 void Triangle::drawTriangle(SDL_Renderer* renderer, SDL_Color color) const {
-    auto edgeFunction = [](const Vec2& a, const Vec2& b, const Vec2& c) {
-        return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
-    };
+    SDL_Vertex verts[3];
+    for (int i = 0; i < 3; ++i) {
+        verts[i].position = SDL_FPoint{ vertices[i].x, vertices[i].y };
+        verts[i].color = SDL_FColor{
+    color.r / 255.0f,
+    color.g / 255.0f,
+    color.b / 255.0f,
+    color.a / 255.0f
+};
 
-    float minX = std::min({ vertices[0].x, vertices[1].x, vertices[2].x });
-    float maxX = std::max({ vertices[0].x, vertices[1].x, vertices[2].x });
-    float minY = std::min({ vertices[0].y, vertices[1].y, vertices[2].y });
-    float maxY = std::max({ vertices[0].y, vertices[1].y, vertices[2].y });
-
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-
-    for (int y = (int)minY; y <= (int)maxY; ++y) {
-        for (int x = (int)minX; x <= (int)maxX; ++x) {
-            Vec2 p = { (float)x + 0.5f, (float)y + 0.5f };
-            float w0 = edgeFunction(vertices[1], vertices[2], p);
-            float w1 = edgeFunction(vertices[2], vertices[0], p);
-            float w2 = edgeFunction(vertices[0], vertices[1], p);
-
-            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
-                SDL_RenderPoint(renderer, x, y);
-            }
-        }
+        verts[i].tex_coord = SDL_FPoint{0, 0};
     }
+
+    SDL_RenderGeometry(renderer, nullptr, verts, 3, nullptr, 0);
 }
+
 
 void Triangle::draw(SDL_Renderer* renderer, SDL_Color color) {
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
