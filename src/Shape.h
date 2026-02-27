@@ -25,7 +25,7 @@ public:
 
     virtual float getMass() const = 0;
 
-    virtual void checkCollision(int screenWidth, int screenHeight, vector<shared_ptr<Shape>> shapeList,  float elasticModifier) = 0;
+    virtual void checkCollision(int screenWidth, int screenHeight, const vector<shared_ptr<Shape>> &shapeList, float elasticModifier) = 0;
 
     virtual optional<Vec2> getMTV(const vector<Vec2>& vertsA, const vector<Vec2>& vertsB) = 0;
     

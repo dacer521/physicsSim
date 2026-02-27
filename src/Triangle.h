@@ -22,7 +22,7 @@ public:
     void applyForce(float fx, float fy) override;
     void drawTriangle(SDL_Renderer* renderer, SDL_Color color) const;
     void draw(SDL_Renderer* renderer, SDL_Color color) override;
-    void checkCollision(int screenWidth, int screenHeight, std::vector<std::shared_ptr<Shape>> shapeList, float elasticModifier) override;
+    void checkCollision(int screenWidth, int screenHeight, const std::vector<std::shared_ptr<Shape>> &shapeList, float elasticModifier) override;
 
     float getVy() const override;
     void setVy(float v) override;

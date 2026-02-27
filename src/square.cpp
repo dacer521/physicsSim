@@ -35,7 +35,7 @@ void Square::draw(SDL_Renderer* renderer, SDL_Color color)  {
 }
 
 
-void Square::checkCollision(int screenWidth, int screenHeight, vector<shared_ptr<Shape>> shapeList, float elasticModifier) {
+void Square::checkCollision(int screenWidth, int screenHeight, const vector<shared_ptr<Shape>> &shapeList, float elasticModifier) {
     // Boundary collision
     if (y + height >= screenHeight) {
         y = screenHeight - height;
@@ -71,25 +71,47 @@ void Square::checkCollision(int screenWidth, int screenHeight, vector<shared_ptr
             // Find closest point on square to circle center
             float closestX = std::max(x, std::min(c->getX(), x + width));
             float closestY = std::max(y, std::min(c->getY(), y + height));
-            
+
             dx = c->getX() - closestX;
             dy = c->getY() - closestY;
             float dist = std::sqrt(dx * dx + dy * dy);
-            
-            if (dist < c->getRadius() && dist > 0.001f) {
+
+            if (dist < c->getRadius()) {
                 float overlap = c->getRadius() - dist;
-                float nx = dx / dist;
-                float ny = dy / dist;
-                
-                // Complete separation with buffer
-                float separation = overlap + 2.0f;
-                float squareSeparation = separation * 0.5f;
-                float circleSeparation = separation * 0.5f;
-                
-                x -= nx * squareSeparation;
-                y -= ny * squareSeparation;
-                c->setX(c->getX() + nx * circleSeparation);
-                c->setY(c->getY() + ny * circleSeparation);
+                float nx = 1.0f;
+                float ny = 0.0f;
+
+                if (dist > 0.001f) {
+                    nx = dx / dist;
+                    ny = dy / dist;
+                } else {
+                    // Circle center inside square: push out along nearest face
+                    float toLeft = c->getX() - x;
+                    float toRight = x + width - c->getX();
+                    float toTop = c->getY() - y;
+                    float toBottom = y + height - c->getY();
+                    if (toLeft <= toRight && toLeft <= toTop && toLeft <= toBottom) {
+                        nx = 1.0f; ny = 0.0f; dist = toLeft;
+                    } else if (toRight <= toTop && toRight <= toBottom) {
+                        nx = -1.0f; ny = 0.0f; dist = toRight;
+                    } else if (toTop <= toBottom) {
+                        nx = 0.0f; ny = 1.0f; dist = toTop;
+                    } else {
+                        nx = 0.0f; ny = -1.0f; dist = toBottom;
+                    }
+                    if (dist >= c->getRadius()) {
+                        overlap = c->getRadius() + dist;
+                    } else {
+                        overlap = c->getRadius() - dist;
+                    }
+                }
+
+                // Separate by overlap (no extra buffer)
+                float separation = overlap * 0.5f;
+                x -= nx * separation;
+                y -= ny * separation;
+                c->setX(c->getX() + nx * separation);
+                c->setY(c->getY() + ny * separation);
                 
                 // Velocity reflection
                 float relVelX = vx - c->getVx();
@@ -107,6 +129,7 @@ void Square::checkCollision(int screenWidth, int screenHeight, vector<shared_ptr
                 c->setVy(c->getVy() - impulse * (-ny) / c->getMass());
             }
         } else {
+            if (this > shape.get()) continue; // resolve each polygon pair once
             // SAT collision with other polygons - FIXED
             vector<Vec2> vertsA = getVertices();
             vector<Vec2> vertsB = shape->getVertices();
@@ -116,7 +139,7 @@ void Square::checkCollision(int screenWidth, int screenHeight, vector<shared_ptr
                 float mtvLength = std::sqrt(mtv->x * mtv->x + mtv->y * mtv->y);
                 if (mtvLength > 0.001f) {
                     Vec2 normalizedMtv = {mtv->x / mtvLength, mtv->y / mtvLength};
-                    float separationDistance = mtvLength + 2.0f;  // Add buffer
+                    float separationDistance = mtvLength;
                     
                     // Complete separation
                     x += normalizedMtv.x * separationDistance * 0.5f;
@@ -136,8 +159,8 @@ void Square::checkCollision(int screenWidth, int screenHeight, vector<shared_ptr
                     
                     vx += impulse * normalizedMtv.x / mass;
                     vy += impulse * normalizedMtv.y / mass;
-                    shape->setVx(shape->getVx() - impulse * normalizedMtv.x / mass);
-                    shape->setVy(shape->getVy() - impulse * normalizedMtv.y / mass);
+                    shape->setVx(shape->getVx() - impulse * normalizedMtv.x / shape->getMass());
+                    shape->setVy(shape->getVy() - impulse * normalizedMtv.y / shape->getMass());
                 }
             }
         }
@@ -153,7 +176,8 @@ std::vector<Vec2> Square::getVertices() const {
     verts.push_back({getX(), getY() + getHeight()});
 
     return verts;
-}std::optional<Vec2> Square::getMTV(const std::vector<Vec2>& vertsA, const std::vector<Vec2>& vertsB) {
+}
+std::optional<Vec2> Square::getMTV(const std::vector<Vec2>& vertsA, const std::vector<Vec2>& vertsB) {
     float minOverlap = std::numeric_limits<float>::infinity();
     Vec2 mtvAxis;
 

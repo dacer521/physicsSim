@@ -19,7 +19,7 @@ public:
     void applyForce(float fx, float fy) override;
     void draw(SDL_Renderer* renderer, SDL_Color color) override;
 
-    void checkCollision(int screenWidth, int screenHeight, std::vector<std::shared_ptr<Shape>> shapeList, float elasticModifier) override;
+    void checkCollision(int screenWidth, int screenHeight, const std::vector<std::shared_ptr<Shape>> &shapeList, float elasticModifier) override;
     std::optional<Vec2> getMTV(const std::vector<Vec2>& vertsA, const std::vector<Vec2>& vertsB) override;
 
     float getVx() const override;

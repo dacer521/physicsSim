@@ -67,7 +67,7 @@ std::optional<Vec2> Circle::getMTV(const std::vector<Vec2>& vertsA, const std::v
         float maxA = centerProj + r;
 
         float overlap = std::min(maxA, maxB) - std::max(minA, minB);
-        if (overlap <= 0) return std::nullopt;
+        if (overlap < 0) return std::nullopt;
         if (overlap < minOverlap) {
             minOverlap = overlap;
             smallestAxis = axis;
@@ -80,7 +80,7 @@ std::optional<Vec2> Circle::getMTV(const std::vector<Vec2>& vertsA, const std::v
 float Circle::getRadius() {
     return r;
 }
-void Circle::checkCollision(int screenWidth, int screenHeight, std::vector<std::shared_ptr<Shape>> shapeList, float elasticModifier) {
+void Circle::checkCollision(int screenWidth, int screenHeight, const std::vector<std::shared_ptr<Shape>> &shapeList, float elasticModifier) {
     // Boundary collision detection
     if (y + r >= screenHeight) {
         y = screenHeight - r;
@@ -102,25 +102,30 @@ void Circle::checkCollision(int screenWidth, int screenHeight, std::vector<std::
         vx = abs(vx) * elasticModifier;
     }
 
-    // Shape-to-shape collision - FIXED
+    // Shape-to-shape collision (circle-only to avoid double-resolution)
     for (auto& shape : shapeList) {
         if (shape.get() == this) continue;
 
         if (Circle* c = dynamic_cast<Circle*>(shape.get())) {
+            if (this > c) continue; // resolve each pair once
             float dx = x - c->getX();
             float dy = y - c->getY();
             float dist = std::sqrt(dx * dx + dy * dy);
             float totalRadius = r + c->getRadius();
 
-            if (dist < totalRadius && dist > 0.001f) {  // Small epsilon to avoid division by zero
+            if (dist < totalRadius) {
                 float overlap = totalRadius - dist;
-                
-                // Normalize direction
-                float nx = dx / dist;
-                float ny = dy / dist;
-                
-                // Separate objects COMPLETELY - move them apart by the full overlap plus a small buffer
-                float separation = (overlap + 2.0f) * 0.5f;  // Added buffer and ensure full separation
+
+                // Normalize direction (fallback to avoid division by zero)
+                float nx = 1.0f;
+                float ny = 0.0f;
+                if (dist > 0.001f) {
+                    nx = dx / dist;
+                    ny = dy / dist;
+                }
+
+                // Separate objects by the overlap (no extra buffer)
+                float separation = overlap * 0.5f;
                 x += nx * separation;
                 y += ny * separation;
                 c->setX(c->getX() - nx * separation);
@@ -145,34 +150,6 @@ void Circle::checkCollision(int screenWidth, int screenHeight, std::vector<std::
                 vy += impulse * ny / mass;
                 c->setVx(c->getVx() - impulse * nx / c->mass);
                 c->setVy(c->getVy() - impulse * ny / c->mass);
-            }
-        } else {
-            // Collision with other shapes - FIXED
-            std::vector<Vec2> circleVerts = getVertices();
-            std::vector<Vec2> otherVerts = shape->getVertices();
-
-            auto mtvOpt = shape->getMTV(circleVerts, otherVerts);
-            if (mtvOpt) {
-                Vec2 mtv = *mtvOpt;
-                
-                // Ensure complete separation with buffer
-                float mtvLength = std::sqrt(mtv.x * mtv.x + mtv.y * mtv.y);
-                if (mtvLength > 0.001f) {  // Avoid zero-length MTV
-                    Vec2 normalizedMtv = {mtv.x / mtvLength, mtv.y / mtvLength};
-                    float separationDistance = mtvLength + 2.0f;  // Add buffer
-                    
-                    x += normalizedMtv.x * separationDistance * 0.5f;
-                    y += normalizedMtv.y * separationDistance * 0.5f;
-                    shape->setX(shape->getX() - normalizedMtv.x * separationDistance * 0.5f);
-                    shape->setY(shape->getY() - normalizedMtv.y * separationDistance * 0.5f);
-                    
-                    // Apply velocity changes only if moving towards collision
-                    float dot = vx * normalizedMtv.x + vy * normalizedMtv.y;
-                    if (dot < 0) {  // Moving towards collision
-                        vx -= dot * normalizedMtv.x * elasticModifier;
-                        vy -= dot * normalizedMtv.y * elasticModifier;
-                    }
-                }
             }
         }
     }

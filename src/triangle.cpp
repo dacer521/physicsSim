@@ -9,6 +9,20 @@
 #include <iostream>
 #include <limits>
 
+static bool pointInTriangle(const Vec2& p, const Vec2& a, const Vec2& b, const Vec2& c) {
+    auto sign = [](const Vec2& p1, const Vec2& p2, const Vec2& p3) {
+        return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+    };
+
+    float d1 = sign(p, a, b);
+    float d2 = sign(p, b, c);
+    float d3 = sign(p, c, a);
+
+    bool hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    bool hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+    return !(hasNeg && hasPos);
+}
+
 Triangle::Triangle(Vec2 v1, Vec2 v2, Vec2 v3, float m, float vx, float vy, SDL_Color c)
     : vx(vx), vy(vy), mass(m), color(c)
 {
@@ -34,10 +48,10 @@ void Triangle::drawTriangle(SDL_Renderer* renderer, SDL_Color color) const {
     for (int i = 0; i < 3; ++i) {
         verts[i].position = SDL_FPoint{ vertices[i].x, vertices[i].y };
         verts[i].color = SDL_FColor{
-    color.r / 255.0f,
-    color.g / 255.0f,
-    color.b / 255.0f,
-    color.a / 255.0f
+        color.r / 255.0f,
+        color.g / 255.0f,
+        color.b / 255.0f,
+        color.a / 255.0f 
 };
 
         verts[i].tex_coord = SDL_FPoint{0, 0};
@@ -120,7 +134,7 @@ std::optional<Vec2> Triangle::getMTV(const std::vector<Vec2>& vertsA, const std:
 }
 void Triangle::checkCollision(int screenWidth,
                               int screenHeight,
-                              std::vector<std::shared_ptr<Shape>> shapeList,
+                              const std::vector<std::shared_ptr<Shape>> &shapeList,
                               float elasticModifier)
 {
     // 1) Boundary checks (unchanged)
@@ -155,69 +169,109 @@ void Triangle::checkCollision(int screenWidth,
         if (shapePtr.get() == this) continue;
 
         // --- Circle vs Triangle (edge-projection) ---
-        if (auto *c = dynamic_cast<Circle*>(shapePtr.get())) {
-            Vec2 center{ c->getX(), c->getY() };
-            float radius = c->getRadius();
 
-            float bestDistSq = std::numeric_limits<float>::max();
-            Vec2 bestNormal{1,0};
-
-            // find closest point on each triangle edge
-            for (int i = 0; i < 3; ++i) {
-                Vec2 A = vertices[i];
-                Vec2 B = vertices[(i+1)%3];
-                Vec2 AB{ B.x - A.x, B.y - A.y };
-                Vec2 AC{ center.x - A.x, center.y - A.y };
-
-                float t = (AB.x*AC.x + AB.y*AC.y) / (AB.x*AB.x + AB.y*AB.y);
-                t = std::clamp(t, 0.0f, 1.0f);
-
-                Vec2 proj{ A.x + t*AB.x, A.y + t*AB.y };
-                float dx = center.x - proj.x, dy = center.y - proj.y;
-                float distSq = dx*dx + dy*dy;
-
-                if (distSq < bestDistSq) {
-                    bestDistSq = distSq;
-                    float d = std::sqrt(distSq);
-                    if (d > 0.0001f) bestNormal = { dx/d, dy/d };
-                    else            bestNormal = {1,0};
+            if (auto *c = dynamic_cast<Circle*>(shapePtr.get())) {
+                Vec2 circleCenter{ c->getX(), c->getY() };
+                float radius = c->getRadius();
+                
+                // Find closest point on triangle to circle center
+                float minDistSq = std::numeric_limits<float>::max();
+                Vec2 closestPoint;
+                
+                // Check each edge of the triangle
+                for (int i = 0; i < 3; ++i) {
+                    Vec2 A = vertices[i];
+                    Vec2 B = vertices[(i + 1) % 3];
+                    
+                    // Vector from A to B (edge)
+                    Vec2 edge{ B.x - A.x, B.y - A.y };
+                    // Vector from A to circle center
+                    Vec2 toCircle{ circleCenter.x - A.x, circleCenter.y - A.y };
+                    
+                    // Project circle center onto edge
+                    float edgeLengthSq = edge.x * edge.x + edge.y * edge.y;
+                    float t = 0.0f;
+                    if (edgeLengthSq > 0.0001f) {
+                        t = (edge.x * toCircle.x + edge.y * toCircle.y) / edgeLengthSq;
+                        t = std::clamp(t, 0.0f, 1.0f);  // Keep on edge segment
+                    }
+                    
+                    // Closest point on this edge
+                    Vec2 pointOnEdge{ A.x + t * edge.x, A.y + t * edge.y };
+                    
+                    // Distance squared from circle center to this point
+                    float dx = circleCenter.x - pointOnEdge.x;
+                    float dy = circleCenter.y - pointOnEdge.y;
+                    float distSq = dx * dx + dy * dy;
+                    
+                    if (distSq < minDistSq) {
+                        minDistSq = distSq;
+                        closestPoint = pointOnEdge;
+                    }
                 }
-            }
-
-            float dist = std::sqrt(bestDistSq);
-            float overlap = radius - dist;
-            if (overlap > 0.001f) {
-                // separate by half each
-                float sep = overlap + 2.0f;
-                Vec2 sepVec{ bestNormal.x*(sep*0.5f),
-                             bestNormal.y*(sep*0.5f) };
-
-                // move triangle
-                Vec2 triOld{ getX(), getY() };
-                setX(triOld.x + sepVec.x);
-                setY(triOld.y + sepVec.y);
-
-                // move circle
-                Vec2 cirOld{ c->getX(), c->getY() };
-                c->setX(cirOld.x - sepVec.x);
-                c->setY(cirOld.y - sepVec.y);
-
-                // velocity impulse
-                float relVx = vx - c->getVx();
-                float relVy = vy - c->getVy();
-                float velAlong = relVx*bestNormal.x + relVy*bestNormal.y;
-                if (velAlong < 0) {
-                    float j = -(1 + elasticModifier)*velAlong;
-                    j /= (1.0f/mass + 1.0f/c->getMass());
-                    vx += j*bestNormal.x/mass;
-                    vy += j*bestNormal.y/mass;
-                    c->setVx(c->getVx() - j*bestNormal.x/c->getMass());
-                    c->setVy(c->getVy() - j*bestNormal.y/c->getMass());
+                
+                float dist = std::sqrt(minDistSq);
+                bool centerInside = pointInTriangle(circleCenter, vertices[0], vertices[1], vertices[2]);
+                
+                // Check collision (including containment)
+                if (dist < radius || centerInside) {
+                    float overlap = radius - dist;
+                    if (centerInside && dist >= radius) {
+                        overlap = radius + dist;
+                    }
+                    
+                    // Normal points FROM closest point TO circle center
+                    float nx = 1.0f;
+                    float ny = 0.0f;
+                    if (dist > 0.001f) {
+                        nx = (circleCenter.x - closestPoint.x) / dist;
+                        ny = (circleCenter.y - closestPoint.y) / dist;
+                    } else {
+                        Vec2 centroid{
+                            (vertices[0].x + vertices[1].x + vertices[2].x) / 3.0f,
+                            (vertices[0].y + vertices[1].y + vertices[2].y) / 3.0f
+                        };
+                        float cdx = circleCenter.x - centroid.x;
+                        float cdy = circleCenter.y - centroid.y;
+                        float clen = std::sqrt(cdx * cdx + cdy * cdy);
+                        if (clen > 0.001f) {
+                            nx = cdx / clen;
+                            ny = cdy / clen;
+                        }
+                    }
+                    
+                    // FIXED: Use direct vertex manipulation like boundary collision
+                    float separation = overlap;
+                    float triangleSeparation = separation * 0.5f;
+                    float circleSeparation = separation * 0.5f;
+                    
+                    // Move triangle vertices directly (like boundary collision does)
+                    for (auto &v : vertices) {
+                        v.x -= nx * triangleSeparation;
+                        v.y -= ny * triangleSeparation;
+                    }
+                    
+                    // Move circle away from triangle
+                    c->setX(circleCenter.x + nx * circleSeparation);
+                    c->setY(circleCenter.y + ny * circleSeparation);
+                    
+                    // Velocity collision response (same as Square)
+                    float relVelX = vx - c->getVx();
+                    float relVelY = vy - c->getVy();
+                    float velAlongNormal = relVelX * nx + relVelY * ny;
+                    
+                    if (velAlongNormal < 0) {  // Moving towards collision
+                        float impulse = -(1 + elasticModifier) * velAlongNormal;
+                        impulse /= (1.0f/mass + 1.0f/c->getMass());
+                        
+                        vx += impulse * nx / mass;
+                        vy += impulse * ny / mass;
+                        c->setVx(c->getVx() - impulse * nx / c->getMass());
+                        c->setVy(c->getVy() - impulse * ny / c->getMass());
+                    }
                 }
-            }
-
-        // --- Polygon vs Triangle (SAT) ---
-        } else {
+            }  else {    
+            if (this > shapePtr.get()) continue; // resolve each polygon pair once
             auto myVerts    = getVertices();
             auto otherVerts = shapePtr->getVertices();
             auto mtvOpt     = getMTV(myVerts, otherVerts);
@@ -228,7 +282,7 @@ void Triangle::checkCollision(int screenWidth,
             if (len <= 0.001f) continue;
 
             Vec2 normal{ mtv.x/len, mtv.y/len };
-            float overlap = len + 2.0f;
+            float overlap = len;
             Vec2 sepVec{ normal.x*(overlap*0.5f),
                          normal.y*(overlap*0.5f) };
 
